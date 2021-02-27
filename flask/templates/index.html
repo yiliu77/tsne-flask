@@ -1,0 +1,152 @@
+<html>
+    <head>
+        <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
+    </head>
+    <body onload="main()">
+        <h3>Hover over points to see images, Click on canvas to select area then click label button to label points within area</h3>
+        <canvas id="canvas" style="border:1px solid #000000;" width=600 height=600></canvas>
+        <img id="picture"></img>
+
+        <script>
+            var canvas = document.getElementById("canvas");
+            var ctx = canvas.getContext("2d");
+            var width = canvas.width;
+            var height = canvas.height;
+            var data = JSON.parse('{{ img_dict | tojson | safe}}');
+            var labeled = []
+
+            var min_x_data = -40;
+            var max_x_data = 40;
+            var min_y_data = -40;
+            var max_y_data = 40;
+            var data_x_range = max_x_data - min_x_data;
+            var data_y_range = max_y_data - min_y_data;
+
+            var selection = []
+
+            var btnClearX = 30;
+            var btnClearY = 30;
+            var btnClearWidth = 86;
+            var btnClearHeight = 30;
+            var btnLabelX = 30;
+            var btnLabelY = 80;
+            var btnLabelWidth = 86;
+            var btnLabelHeight = 30;
+
+            function drawPoints() {
+                ctx.fillStyle = "lightblue";
+                ctx.fillRect(btnClearX, btnClearY, btnClearWidth, btnClearHeight);
+                ctx.fillStyle = "black";
+                ctx.fillText("Clear Selection", btnClearX + 8, btnClearY + btnClearHeight / 2);
+
+                ctx.fillStyle = "lightblue";
+                ctx.fillRect(btnLabelX, btnLabelY, btnLabelWidth, btnLabelHeight);
+                ctx.fillStyle = "black";
+                ctx.fillText("Label Selection", btnLabelX + 8, btnLabelY + btnLabelHeight / 2);
+
+                for (var i = 0; i < data.length; i++) {
+                    var point = data[i];
+                    var pX = (point.x - min_x_data) * width / data_x_range;
+                    var pY = (point.y - min_y_data) * height / data_y_range;
+
+                    ctx.beginPath();
+                    ctx.arc(pX, pY, 4, 0, 2 * Math.PI, false);
+                    if (labeled.includes(i)) {
+                        ctx.fillStyle = 'green';
+                    } else {
+                        ctx.fillStyle = 'red';
+                    }
+                    ctx.fill();
+                }
+            }
+
+            function drawSelection() {
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                ctx.fillStyle = 'orange';
+                ctx.beginPath();
+                for (var i = 0; i < selection.length; i++) {
+                    ctx.fillRect(selection[i][0] - 2, selection[i][1] - 2, 4, 4);
+                    ctx.lineTo(selection[i][0], selection[i][1]);
+                }
+                ctx.closePath();
+                ctx.fill();
+                drawPoints();
+            }
+
+            function clearSelection() {
+                selection = []
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                drawPoints();
+                drawSelection();
+            }
+
+            function inside(point, vs) {
+                // ray-casting algorithm based on
+                // https://wrf.ecse.rpi.edu/Research/Short_Notes/pnpoly.html/pnpoly.html
+
+                var x = point[0], y = point[1];
+
+                var inside = false;
+                for (var i = 0, j = vs.length - 1; i < vs.length; j = i++) {
+                    var xi = vs[i][0], yi = vs[i][1];
+                    var xj = vs[j][0], yj = vs[j][1];
+
+                    var intersect = ((yi > y) != (yj > y))
+                        && (x < (xj - xi) * (y - yi) / (yj - yi) + xi);
+                    if (intersect) inside = !inside;
+                }
+
+                return inside;
+            }
+
+            function labelSelection() {
+                for (var i = 0; i < data.length; i++) {
+                    var point = data[i];
+                    var pX = (point.x - min_x_data) * width / data_x_range;
+                    var pY = (point.y - min_y_data) * height / data_y_range;
+                    if (inside([pX, pY], selection)) {
+                        labeled.push(i);
+                    }
+                }
+                clearSelection();
+            }
+
+            function main() {
+                drawPoints();
+                canvas.onmousemove = function (e) {
+                    curX = e.clientX - canvas.offsetLeft;
+                    curY = e.clientY - canvas.offsetTop;
+                    var picFile = "";
+                    for (var i = 0; i < data.length; i++) {
+                        var point = data[i];
+                        var pX = (point.x - min_x_data) * width / data_x_range;
+                        var pY = (point.y - min_y_data) * height / data_y_range;
+                        if (Math.pow(pX - curX, 2) + Math.pow(pY - curY, 2) < 100) {
+                            picFile = point.filename;
+                            break;
+                        }
+                    }
+                    if (picFile.localeCompare("") != 0) {
+                        // alert(picFile);
+                        $('#picture').attr("src", "/static/" + picFile);
+                    }
+                }
+                canvas.onmousedown = function (e) {
+                    curX = e.clientX - canvas.offsetLeft;
+                    curY = e.clientY - canvas.offsetTop;
+                    if ((btnClearX <= curX) && (curX <= btnClearX + btnClearWidth) &&
+                        (btnClearY <= curY) && (curY <= btnClearY + btnClearHeight)) {
+                        clearSelection();
+                    } else if ((btnLabelX <= curX) && (curX <= btnLabelX + btnLabelWidth) &&
+                        (btnLabelY <= curY) && (curY <= btnLabelY + btnLabelHeight)) {
+                        prompt("Label: ");
+                        labelSelection();
+                    } else {
+                        selection.push([curX, curY]);
+                        drawSelection();
+                    }
+                }
+            }
+        </script>
+    </body>
+</html>
